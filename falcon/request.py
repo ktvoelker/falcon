@@ -12,6 +12,7 @@
 
 """Request class."""
 
+from contextlib import contextmanager
 from datetime import datetime
 import json
 
@@ -399,6 +400,10 @@ class Request(object):
             self.context = {}
         else:
             self.context = self.context_type()
+
+        self.deferring_exceptions = False
+        self.deferred_exceptions = []
+        self.exception = None
 
     # ------------------------------------------------------------------------
     # Properties
@@ -813,6 +818,22 @@ class Request(object):
                    'Section 7.1.1.1')
             raise errors.HTTPInvalidHeader(msg, header)
 
+    @contextmanager
+    def defer_exceptions(self):
+        self.deferring_exceptions = True
+        try:
+            yield
+            if self.deferred_exceptions:
+                raise errors.HTTPBadRequest('Multiple errors')
+        finally:
+            self.deferring_exceptions = False
+
+    def raise_exception(self, ex):
+        if self.deferring_exceptions:
+            self.deferred_exceptions.append(ex)
+        else:
+            raise ex
+
     def get_param(self, name, required=False, store=None, default=None):
         """Return the raw value of a query string parameter as a string.
 
@@ -875,7 +896,7 @@ class Request(object):
         if not required:
             return default
 
-        raise errors.HTTPMissingParam(name)
+        self.raise_exception(errors.HTTPMissingParam(name))
 
     def get_param_as_int(self, name,
                          required=False, min=None, max=None, store=None):
@@ -923,15 +944,15 @@ class Request(object):
                 val = int(val)
             except ValueError:
                 msg = 'The value must be an integer.'
-                raise errors.HTTPInvalidParam(msg, name)
+                self.raise_exception(errors.HTTPInvalidParam(msg, name))
 
             if min is not None and val < min:
                 msg = 'The value must be at least ' + str(min)
-                raise errors.HTTPInvalidParam(msg, name)
+                self.raise_exception(errors.HTTPInvalidParam(msg, name))
 
             if max is not None and max < val:
                 msg = 'The value may not exceed ' + str(max)
-                raise errors.HTTPInvalidParam(msg, name)
+                self.raise_exception(errors.HTTPInvalidParam(msg, name))
 
             if store is not None:
                 store[name] = val
@@ -941,7 +962,7 @@ class Request(object):
         if not required:
             return None
 
-        raise errors.HTTPMissingParam(name)
+        self.raise_exception(errors.HTTPMissingParam(name))
 
     def get_param_as_bool(self, name, required=False, store=None,
                           blank_as_true=False):
@@ -995,7 +1016,7 @@ class Request(object):
                 val = True
             else:
                 msg = 'The value of the parameter must be "true" or "false".'
-                raise errors.HTTPInvalidParam(msg, name)
+                self.raise_exception(errors.HTTPInvalidParam(msg, name))
 
             if store is not None:
                 store[name] = val
@@ -1005,7 +1026,7 @@ class Request(object):
         if not required:
             return None
 
-        raise errors.HTTPMissingParam(name)
+        self.raise_exception(errors.HTTPMissingParam(name))
 
     def get_param_as_list(self, name,
                           transform=None, required=False, store=None):
@@ -1067,7 +1088,7 @@ class Request(object):
 
                 except ValueError:
                     msg = 'The value is not formatted correctly.'
-                    raise errors.HTTPInvalidParam(msg, name)
+                    self.raise_exception(errors.HTTPInvalidParam(msg, name))
 
             if store is not None:
                 store[name] = items
@@ -1077,7 +1098,7 @@ class Request(object):
         if not required:
             return None
 
-        raise errors.HTTPMissingParam(name)
+        self.raise_exception(errors.HTTPMissingParam(name))
 
     def get_param_as_date(self, name, format_string='%Y-%m-%d',
                           required=False, store=None):
@@ -1116,7 +1137,7 @@ class Request(object):
             date = strptime(param_value, format_string).date()
         except ValueError:
             msg = 'The date value does not match the required format.'
-            raise errors.HTTPInvalidParam(msg, name)
+            self.raise_exception(errors.HTTPInvalidParam(msg, name))
 
         if store is not None:
             store[name] = date
@@ -1155,7 +1176,7 @@ class Request(object):
             val = json.loads(param_value)
         except ValueError:
             msg = 'It could not be parsed as JSON.'
-            raise errors.HTTPInvalidParam(msg, name)
+            self.raise_exception(errors.HTTPInvalidParam(msg, name))
 
         if store is not None:
             store[name] = val

@@ -1296,6 +1296,7 @@ class HTTPInvalidParam(HTTPBadRequest):
     """
 
     def __init__(self, msg, param_name, **kwargs):
+        self.param_name = param_name
         description = 'The "{0}" parameter is invalid. {1}'
         description = description.format(param_name, msg)
 
@@ -1344,6 +1345,7 @@ class HTTPMissingParam(HTTPBadRequest):
     """
 
     def __init__(self, param_name, **kwargs):
+        self.param_name = param_name
         description = 'The "{0}" parameter is required.'
         description = description.format(param_name)
 

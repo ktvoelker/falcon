@@ -597,6 +597,7 @@ class API(object):
             exception, ``False`` otherwise.
         """
 
+        req.exception = ex
         for err_type, err_handler in self._error_handlers:
             if isinstance(ex, err_type):
                 try:
